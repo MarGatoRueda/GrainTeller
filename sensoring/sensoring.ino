@@ -1,3 +1,7 @@
+// GrainTeller 1.0
+// Made by Marcelo Gatica Ruedlinger
+// Electrical Engineering Student at Universidad de Chile
+
 #include <Wire.h>
 #include <Adafruit_AS7341.h>
 #include <LiquidCrystal_I2C.h>
