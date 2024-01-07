@@ -28,22 +28,22 @@ bool isScanTriggered() {
     uint16_t readings[12];
     sensor.readAllChannels(readings);
 
-    return readings[10] < 40000;
+    return readings[10] < 65000;
 }
 // Vector for white light and no grain sample
-uint16_t white[12] = {3562, 22882, 15275, 15377, 1, 1, 19051, 16047, 11802, 7351, 48107, 3880};
+uint16_t white[12] = {4930, 22168, 15463, 15995, 1, 1, 19153, 17293, 13598, 11484, 65535, 49356};
 
 // Set vectors for each grain sample taken, which will the sample be compared to and classified as
 // Sample 1: Corn
-uint16_t corn[12] = {1319, 5843, 4987, 6989, 0, 0, 12661, 12985, 10867, 6569, 26073, 1878};
+uint16_t corn[12] = {2766, 7007, 6277, 8618, 0, 0, 13678, 14573, 12534, 10250, 51495, 40668};
 // Sample 2: Soybean
-uint16_t soy[12] = {908, 4783, 4450, 5283, 0, 0, 7861, 7636, 6292, 4100, 18426, 1324};
+uint16_t soy[12] = {2120, 5772, 5468, 6496, 0, 0, 8689, 9054, 7751, 6435, 38595, 35758};
 // Sample 3: Wheat
-uint16_t wheat[12] = {1142, 6054, 5219, 5925, 0, 0, 8771, 8895, 7202, 4696, 20880, 1446};
+uint16_t wheat[12] = {2359, 6682, 5985, 6929, 0, 0, 9296, 9775, 8517, 7165, 41785, 37768};
 // Sample 4: Ground Soybean
-uint16_t gro_soy[12] = {1440, 7642, 6984, 8446, 0, 0, 12440, 12235, 9929, 6328, 28172, 1876};
+uint16_t gro_soy[12] = {3005, 8887, 8290, 9969, 0, 0, 13509, 14122, 11877, 9997, 53878, 44330};
 // Sample 5: Ground Wheat
-uint16_t gro_wheat[12] = {1985, 10885, 8534, 11065, 0, 0, 16560, 15299, 11584, 6944, 34498, 2128};
+uint16_t gro_wheat[12] = {3618, 12146, 9979, 12635, 0, 0, 17667, 17245, 13740, 11094, 62447, 45876};
 
 void setup() {
   Wire.begin();
@@ -73,6 +73,19 @@ void setup() {
   lcd.setCursor(0, 1);
   lcd.print("By: Marcelo G.R.");
   delay(3000);
+  lcd.clear();
+    
+  lcd.setCursor(0, 0);
+  lcd.print("Calibrating,");
+  lcd.setCursor(0, 1); 
+  lcd.print("Please wait.");
+
+  // Calibration, replace white[] with the vector obtained from the calibration process
+  uint16_t readings[12];
+  sensor.readAllChannels(readings);
+  for (int i = 0; i < 12; ++i) {
+        white[i] = readings[i];
+  }
 }
 
 void loop() {
