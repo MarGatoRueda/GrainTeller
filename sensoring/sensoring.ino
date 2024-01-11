@@ -28,22 +28,26 @@ bool isScanTriggered() {
     uint16_t readings[12];
     sensor.readAllChannels(readings);
 
-    return readings[10] < 65000;
+    return readings[10] > 5000;
 }
+
+double normalizedDistanceGroSoyToGroWheat;
+
+
 // Vector for white light and no grain sample
-uint16_t white[12] = {4930, 22168, 15463, 15995, 1, 1, 19153, 17293, 13598, 11484, 65535, 49356};
+uint16_t white[12] = {1781, 12097, 7831, 7244, 1, 1, 8948, 7583, 5667, 3356, 23032, 1186};
 
 // Set vectors for each grain sample taken, which will the sample be compared to and classified as
 // Sample 1: Corn
-uint16_t corn[12] = {2766, 7007, 6277, 8618, 0, 0, 13678, 14573, 12534, 10250, 51495, 40668};
+uint16_t corn[12] = {787, 3775, 3307, 4535, 0, 0, 8159, 8154, 6458, 3824, 15420, 1042};
 // Sample 2: Soybean
-uint16_t soy[12] = {2120, 5772, 5468, 6496, 0, 0, 8689, 9054, 7751, 6435, 38595, 35758};
+uint16_t soy[12] = {709, 3750, 3190, 3730, 0, 0, 5522, 5273, 4180, 2673, 12523, 856};
 // Sample 3: Wheat
-uint16_t wheat[12] = {2359, 6682, 5985, 6929, 0, 0, 9296, 9775, 8517, 7165, 41785, 37768};
+uint16_t wheat[12] = {733, 4109, 3470, 3869, 0, 0, 5852, 5675, 4566, 2900, 13113, 896};
 // Sample 4: Ground Soybean
-uint16_t gro_soy[12] = {3005, 8887, 8290, 9969, 0, 0, 13509, 14122, 11877, 9997, 53878, 44330};
+uint16_t gro_soy[12] = {1106, 6061, 5501, 6390, 0, 0, 9581, 9189, 7199, 4387, 18791, 1188};
 // Sample 5: Ground Wheat
-uint16_t gro_wheat[12] = {3618, 12146, 9979, 12635, 0, 0, 17667, 17245, 13740, 11094, 62447, 45876};
+uint16_t gro_wheat[12] = {1311, 7414, 5625, 7027, 0, 0, 10600, 9603, 7051, 4058, 21321, 1274};
 
 void setup() {
   Wire.begin();
@@ -74,18 +78,7 @@ void setup() {
   lcd.print("By: Marcelo G.R.");
   delay(3000);
   lcd.clear();
-    
-  lcd.setCursor(0, 0);
-  lcd.print("Calibrating,");
-  lcd.setCursor(0, 1); 
-  lcd.print("Please wait.");
 
-  // Calibration, replace white[] with the vector obtained from the calibration process
-  uint16_t readings[12];
-  sensor.readAllChannels(readings);
-  for (int i = 0; i < 12; ++i) {
-        white[i] = readings[i];
-  }
 }
 
 void loop() {
@@ -193,7 +186,7 @@ void loop() {
         lcd.setCursor(0, 1);
         switch (index) {
             case 0:
-                lcd.print("  Corn");
+                lcd.print("      Corn");
                 break;
             case 1:
                 lcd.print("     Soybean");
@@ -215,6 +208,7 @@ void loop() {
     }
 
     delay(10000); // Delay before next scan
+
 
 
   Serial.print("ADC0/F1 415nm : ");
