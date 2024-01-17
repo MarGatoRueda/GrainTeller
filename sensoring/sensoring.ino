@@ -7,17 +7,33 @@
 #include <LiquidCrystal_I2C.h>
 
 #define MEASUREMENT_COUNT 10
-#define THRESHOLD 0.15
+#define THRESHOLD 0.3
 
 LiquidCrystal_I2C lcd(0x3F, 16, 2);  // Set the LCD address to 0x3F
 Adafruit_AS7341 sensor;
 
-double euclideanDistance(double *reading1, double *reading2, uint8_t size) {
+// Function template for both uint16_t and double arrays
+template <typename T>
+double euclideanDistance(T *reading1, T *reading2, uint8_t size) {
     double sum = 0.0;
 
     for (uint8_t i = 0; i < size; i++) {
         if (i == 4 || i == 5) continue; // Skip indices 4, 5, since those are duplicates
-        double diff = reading1[i] - reading2[i];
+        double diff = static_cast<double>(reading1[i]) - static_cast<double>(reading2[i]);
+        sum += diff * diff;
+    }
+
+    return sqrt(sum);
+}
+
+// Specialization for uint16_t arrays
+template <>
+double euclideanDistance(uint16_t *reading1, uint16_t *reading2, uint8_t size) {
+    double sum = 0.0;
+
+    for (uint8_t i = 0; i < size; i++) {
+        if (i == 4 || i == 5) continue; // Skip indices 4, 5, since those are duplicates
+        double diff = static_cast<double>(reading1[i]) - static_cast<double>(reading2[i]);
         sum += diff * diff;
     }
 
@@ -30,58 +46,183 @@ bool isScanTriggered() {
 
     return readings[10] > 5000;
 }
-
-double normalizedDistanceGroSoyToGroWheat;
+bool isFirstTime = true;
+bool switchedToMixtureRatioMode = false;
 
 
 // Vector for white light and no grain sample
-uint16_t white[12] = {1781, 12097, 7831, 7244, 1, 1, 8948, 7583, 5667, 3356, 23032, 1186};
+uint16_t white[12] = {1962, 9994, 7576, 7116, 1, 1, 8665, 8019, 6401, 4631, 25091, 7311};
 
 // Set vectors for each grain sample taken, which will the sample be compared to and classified as
 // Sample 1: Corn
-uint16_t corn[12] = {787, 3775, 3307, 4535, 0, 0, 8159, 8154, 6458, 3824, 15420, 1042};
+uint16_t corn[12] = {771, 3007, 2964, 3818, 0, 0, 6937, 7330, 5904, 3853, 13704, 2144};
 // Sample 2: Soybean
-uint16_t soy[12] = {709, 3750, 3190, 3730, 0, 0, 5522, 5273, 4180, 2673, 12523, 856};
+uint16_t soy[12] = {606, 2817, 2837, 3194, 0, 0, 4675, 4693, 3600, 2437, 10176, 1526};
 // Sample 3: Wheat
-uint16_t wheat[12] = {733, 4109, 3470, 3869, 0, 0, 5852, 5675, 4566, 2900, 13113, 896};
+uint16_t wheat[12] = {733, 3514, 3236, 3509, 0, 0, 5153, 5163, 4176, 2860, 11916, 2058};
 // Sample 4: Ground Soybean
-uint16_t gro_soy[12] = {1106, 6061, 5501, 6390, 0, 0, 9581, 9189, 7199, 4387, 18791, 1188};
-// Sample 5: Ground Wheat
-uint16_t gro_wheat[12] = {1311, 7414, 5625, 7027, 0, 0, 10600, 9603, 7051, 4058, 21321, 1274};
+uint16_t gro_soy[12] = {952, 4397, 4340, 4941, 0, 0, 7210, 7203, 5766, 3872, 14700, 2488};
+// Sample 5: Ground Corn
+uint16_t gro_corn[12] = {1097, 5515, 4634, 5772, 0, 0, 8601, 8004, 5999, 3697, 17279, 2070};
 
 void setup() {
-  Wire.begin();
-  lcd.init();                      // Initialize the LCD
-  lcd.backlight();                 // Turn on the backlight
-  Serial.begin(115200);
+    Wire.begin();
+    lcd.init();                      // Initialize the LCD
+    lcd.backlight();                 // Turn on the backlight
+    Serial.begin(115200);
 
-  while (!Serial) {
-    delay(1);
-  }
-  
-  if (!sensor.begin()) {
+    while (!Serial) {
+        delay(1);
+    }
+
+    if (!sensor.begin()) {
+        lcd.setCursor(0, 0);
+        lcd.print("AS7341 not found");
+        while (1);
+    }
+
+    sensor.setATIME(100);
+    sensor.setASTEP(999);
+    sensor.setGain(AS7341_GAIN_256X);
+
+    sensor.setLEDCurrent(60);    // Set LED's intensity
+    sensor.enableLED(true);       // Turn on the LED's
+
     lcd.setCursor(0, 0);
-    lcd.print("AS7341 not found");
-    while (1);
-  }
+    lcd.print("GrainTeller 1.0");
+    lcd.setCursor(0, 1);
+    lcd.print("By: Marcelo G.R.");
+    delay(3000);
+    lcd.clear();
 
-  sensor.setATIME(100);
-  sensor.setASTEP(999);
-  sensor.setGain(AS7341_GAIN_256X);
-
-  sensor.setLEDCurrent(60);    // Set LED's intensity
-  sensor.enableLED(true);       // Turn on the LED's
-
-  lcd.setCursor(0, 0);
-  lcd.print("GrainTeller 1.0");
-  lcd.setCursor(0, 1);
-  lcd.print("By: Marcelo G.R.");
-  delay(3000);
-  lcd.clear();
-
+    pinMode(A0, INPUT);
+    pinMode(A1, INPUT);
 }
 
-void loop() {
+enum Mode {
+    GRAIN_SCANNING,
+    MIXTURE_RATIO_ESTIMATOR
+};
+
+Mode currentMode = GRAIN_SCANNING;
+
+void mixtureRatioEstimatorMode() {
+
+    if (switchedToMixtureRatioMode || isFirstTime) {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Switched to");
+        lcd.setCursor(0, 1);
+        lcd.print("Mixture % Mode");
+        delay(2000);
+        isFirstTime = false;
+        switchedToMixtureRatioMode = false;
+    }
+
+    while (!isScanTriggered()) {
+        lcd.setCursor(0, 0);
+        lcd.print("  == Insert ==  ");
+        lcd.setCursor(0, 1);
+        lcd.print("  == Sample ==  ");
+        delay(500);
+    }
+    lcd.clear();
+    // Sample detected countdown
+    for (int i = 3; i > 0; --i) {
+        lcd.setCursor(0, 0);
+        lcd.print("Sample detected,");
+        lcd.setCursor(0, 1);
+        lcd.print("scanning in ");
+        lcd.print(i);
+        delay(1000);
+    }
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Scanning...");
+
+    uint16_t readings[12];
+
+    double measuredValue = 0.0;
+    double groundSoyValue = static_cast<double>(gro_soy[10]) / white[10];
+    double groundCornValue = static_cast<double>(gro_corn[10]) / white[10];
+
+    for (int i = 0; i < MEASUREMENT_COUNT; ++i) {
+        if (!sensor.readAllChannels(readings)) {
+            lcd.clear();
+            lcd.print("Error reading");
+            lcd.print("all channels!");
+            return;
+        }
+
+        measuredValue += static_cast<double>(readings[10]) / white[10];
+
+        delay(20); // Delay between measurements
+    }
+
+    measuredValue /= MEASUREMENT_COUNT;
+
+    lcd.clear();
+
+    double totalDistance = groundCornValue - groundSoyValue;
+    
+    if (totalDistance > 0) {
+        double percentage = ((measuredValue - groundSoyValue) / totalDistance) * 100;
+
+        lcd.setCursor(0, 0);
+        lcd.print("Gro. Corn %:");
+        lcd.print(percentage);
+        lcd.print("%");
+
+        lcd.setCursor(0, 1);
+        lcd.print("Gro. Soy %:");
+        lcd.print(100 - percentage);
+        lcd.print("%");
+    } else {
+        lcd.print("Error calculating");
+        lcd.setCursor(0, 1);
+        lcd.print("mixture ratio");
+    }
+
+    Serial.print("ADC0/F1 415nm : ");
+    Serial.println(readings[0]);
+    Serial.print("ADC1/F2 445nm : ");
+    Serial.println(readings[1]);
+    Serial.print("ADC2/F3 480nm : ");
+    Serial.println(readings[2]);
+    Serial.print("ADC3/F4 515nm : ");
+    Serial.println(readings[3]);
+    Serial.print("ADC0/F5 555nm : ");
+    Serial.println(readings[6]);
+    Serial.print("ADC1/F6 590nm : ");
+    Serial.println(readings[7]);
+    Serial.print("ADC2/F7 630nm : ");
+    Serial.println(readings[8]);
+    Serial.print("ADC3/F8 680nm : ");
+    Serial.println(readings[9]);
+    Serial.print("ADC4/Clear    : ");
+    Serial.println(readings[10]);
+    Serial.print("ADC5/NIR      : ");
+    Serial.println(readings[11]);
+
+    Serial.println();
+    delay(10000); // Delay before next scan
+}
+
+
+void grainScanningMode() {
+
+    if (isFirstTime) {
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Switched to");
+        lcd.setCursor(0, 1);
+        lcd.print("Grain Scanner");
+        delay(3000);
+        isFirstTime = false;
+        switchedToMixtureRatioMode = false;
+    }
+
     while (!isScanTriggered()) {
         lcd.setCursor(0, 0);
         lcd.print("  == Insert ==  ");
@@ -110,17 +251,17 @@ void loop() {
     double sumDistancesSoy = 0.0;
     double sumDistancesWheat = 0.0;
     double sumDistancesGroSoy = 0.0;
-    double sumDistancesGroWheat = 0.0;
+    double sumDistancesGroCorn = 0.0;
 
     double normalizedGroSoy[12];
-    double normalizedGroWheat[12];
+    double normalizedGroCorn[12];
     double normalizedCorn[12];
     double normalizedSoy[12];
     double normalizedWheat[12];
 
     for (int i = 0; i < 12; ++i) {
         normalizedGroSoy[i] = static_cast<double>(gro_soy[i]) / white[i];
-        normalizedGroWheat[i] = static_cast<double>(gro_wheat[i]) / white[i];
+        normalizedGroCorn[i] = static_cast<double>(gro_corn[i]) / white[i];
         normalizedCorn[i] = static_cast<double>(corn[i]) / white[i];
         normalizedSoy[i] = static_cast<double>(soy[i]) / white[i];
         normalizedWheat[i] = static_cast<double>(wheat[i]) / white[i];
@@ -143,13 +284,13 @@ void loop() {
         double distanceSoy = euclideanDistance(normalizedReadings, normalizedSoy, 12);
         double distanceWheat = euclideanDistance(normalizedReadings, normalizedWheat, 12);
         double distanceGroSoy = euclideanDistance(normalizedReadings, normalizedGroSoy, 12);
-        double distanceGroWheat = euclideanDistance(normalizedReadings, normalizedGroWheat, 12);
+        double distanceGroCorn = euclideanDistance(normalizedReadings, normalizedGroCorn, 12);
 
         sumDistancesCorn += distanceCorn;
         sumDistancesSoy += distanceSoy;
         sumDistancesWheat += distanceWheat;
         sumDistancesGroSoy += distanceGroSoy;
-        sumDistancesGroWheat += distanceGroWheat;
+        sumDistancesGroCorn += distanceGroCorn;
 
         delay(20); // Delay between measurements
     }
@@ -158,7 +299,7 @@ void loop() {
     double averageDistanceSoy = sumDistancesSoy / MEASUREMENT_COUNT;
     double averageDistanceWheat = sumDistancesWheat / MEASUREMENT_COUNT;
     double averageDistanceGroSoy = sumDistancesGroSoy / MEASUREMENT_COUNT;
-    double averageDistanceGroWheat = sumDistancesGroWheat / MEASUREMENT_COUNT;
+    double averageDistanceGroCorn = sumDistancesGroCorn / MEASUREMENT_COUNT;
 
     lcd.clear();
 
@@ -167,7 +308,7 @@ void loop() {
         averageDistanceSoy,
         averageDistanceWheat,
         averageDistanceGroSoy,
-        averageDistanceGroWheat
+        averageDistanceGroCorn
     };
 
     double minDist = distances[0];
@@ -192,13 +333,13 @@ void loop() {
                 lcd.print("     Soybean");
                 break;
             case 2:
-                lcd.print("     Wheat");
+                lcd.print("      Wheat");
                 break;
             case 3:
-                lcd.print("  Ground Soy");
+                lcd.print("   Ground Soy");
                 break;
             case 4:
-                lcd.print("  Ground Wheat");
+                lcd.print("   Ground Corn");
                 break;
         }
     } else {
@@ -209,28 +350,55 @@ void loop() {
 
     delay(10000); // Delay before next scan
 
+    Serial.print("ADC0/F1 415nm : ");
+    Serial.println(readings[0]);
+    Serial.print("ADC1/F2 445nm : ");
+    Serial.println(readings[1]);
+    Serial.print("ADC2/F3 480nm : ");
+    Serial.println(readings[2]);
+    Serial.print("ADC3/F4 515nm : ");
+    Serial.println(readings[3]);
+    Serial.print("ADC0/F5 555nm : ");
+    Serial.println(readings[6]);
+    Serial.print("ADC1/F6 590nm : ");
+    Serial.println(readings[7]);
+    Serial.print("ADC2/F7 630nm : ");
+    Serial.println(readings[8]);
+    Serial.print("ADC3/F8 680nm : ");
+    Serial.println(readings[9]);
+    Serial.print("ADC4/Clear    : ");
+    Serial.println(readings[10]);
+    Serial.print("ADC5/NIR      : ");
+    Serial.println(readings[11]);
 
+    Serial.println();
+}
 
-  Serial.print("ADC0/F1 415nm : ");
-  Serial.println(readings[0]);
-  Serial.print("ADC1/F2 445nm : ");
-  Serial.println(readings[1]);
-  Serial.print("ADC2/F3 480nm : ");
-  Serial.println(readings[2]);
-  Serial.print("ADC3/F4 515nm : ");
-  Serial.println(readings[3]);
-  Serial.print("ADC0/F5 555nm : ");
-  Serial.println(readings[6]);
-  Serial.print("ADC1/F6 590nm : ");
-  Serial.println(readings[7]);
-  Serial.print("ADC2/F7 630nm : ");
-  Serial.println(readings[8]);
-  Serial.print("ADC3/F8 680nm : ");
-  Serial.println(readings[9]);
-  Serial.print("ADC4/Clear    : ");
-  Serial.println(readings[10]);
-  Serial.print("ADC5/NIR      : ");
-  Serial.println(readings[11]);
+void loop() {
+    // Check the state of the switch connected to A0 or A1
+    if (analogRead(A0) > analogRead(A1)) {
+        if (currentMode != MIXTURE_RATIO_ESTIMATOR) {
+            currentMode = MIXTURE_RATIO_ESTIMATOR;
+            switchedToMixtureRatioMode = false;
+            isFirstTime = true;
+        }
+    } else if (analogRead(A1) > analogRead(A0)) {
+        if (currentMode != GRAIN_SCANNING) {
+            currentMode = GRAIN_SCANNING;
+            switchedToMixtureRatioMode = true;
+            isFirstTime = true;
+        }
+    }
 
-  Serial.println();
+    // Perform actions based on the current mode
+    switch (currentMode) {
+        case GRAIN_SCANNING:
+            grainScanningMode();
+            break;
+        case MIXTURE_RATIO_ESTIMATOR:
+            mixtureRatioEstimatorMode();
+            break;
+    }
+
+    delay(100); // Add a small delay to debounce the switch (adjust as needed)
 }
