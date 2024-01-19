@@ -7,7 +7,7 @@
 #include <LiquidCrystal_I2C.h>
 
 #define MEASUREMENT_COUNT 10
-#define THRESHOLD 0.15
+#define THRESHOLD 0.35
 
 LiquidCrystal_I2C lcd(0x3F, 16, 2);  // Set the LCD address to 0x3F
 Adafruit_AS7341 sensor;
@@ -61,9 +61,9 @@ uint16_t soy[12] = {472, 2334, 2363, 2706, 0, 0, 4067, 3976, 3210, 2030, 8629, 6
 // Sample 3: Wheat
 uint16_t wheat[12] = {548, 2920, 2706, 2915, 0, 0, 4261, 4202, 3351, 2114, 9582, 702};
 // Sample 4: Ground Soybean
-uint16_t gro_soy[12] = {726, 3751, 3629, 4177, 0, 0, 6125, 5979, 4721, 2870, 12697, 890};
+uint16_t gro_soy[12] = {689, 3543, 3552, 4018, 0, 0, 5919, 5836, 4584, 2856, 12346, 864};
 // Sample 5: Ground Corn
-uint16_t gro_corn[12] = {864, 4554, 3793, 4737, 0, 0, 7152, 6636, 4912, 2839, 13864, 918};
+uint16_t gro_corn[12] = {882, 4683, 4008, 4928, 0, 0, 7464, 6915, 5161, 2962, 14086, 918};
 
 void setup() {
     Wire.begin();
@@ -142,10 +142,16 @@ void mixtureRatioEstimatorMode() {
     lcd.print("Scanning...");
 
     uint16_t readings[12];
-
+    double normalizedGroSoy[12];
+    double normalizedGroCorn[12];
+    double sumDistancesGroSoy = 0.0;
+    double sumDistancesGroCorn = 0.0;
     double measuredValue = 0.0;
-    double groundSoyValue = static_cast<double>(gro_soy[10]) / white[10];
-    double groundCornValue = static_cast<double>(gro_corn[10]) / white[10];
+
+    for (int i = 0; i < 12; ++i) {
+    normalizedGroSoy[i] = static_cast<double>(gro_soy[i]) / white[i];
+    normalizedGroCorn[i] = static_cast<double>(gro_corn[i]) / white[i];
+    }
 
     for (int i = 0; i < MEASUREMENT_COUNT; ++i) {
         if (!sensor.readAllChannels(readings)) {
@@ -154,35 +160,47 @@ void mixtureRatioEstimatorMode() {
             lcd.print("all channels!");
             return;
         }
+        double normalizedReadings[12];
 
-        measuredValue += static_cast<double>(readings[10]) / white[10];
+        for (int j = 0; j < 12; ++j) {
+            normalizedReadings[j] = static_cast<double>(readings[j]) / white[j];
+        }
 
+        double distanceGroSoy = euclideanDistance(normalizedReadings, normalizedGroSoy, 12);
+        double distanceGroCorn = euclideanDistance(normalizedReadings, normalizedGroCorn, 12);
+
+        sumDistancesGroSoy += distanceGroSoy;
+        sumDistancesGroCorn += distanceGroCorn;
         delay(20); // Delay between measurements
     }
+    
 
-    measuredValue /= MEASUREMENT_COUNT;
+    double averageDistanceGroSoy = sumDistancesGroSoy / MEASUREMENT_COUNT;
+    double averageDistanceGroCorn = sumDistancesGroCorn / MEASUREMENT_COUNT;
 
     lcd.clear();
 
-    double totalDistance = groundCornValue - groundSoyValue;
-    
-    if (totalDistance > 0) {
-        double percentage = ((measuredValue - groundSoyValue) / totalDistance) * 100;
+    double totalDistance = euclideanDistance(normalizedGroSoy, normalizedGroCorn, 12);
 
-        lcd.setCursor(0, 0);
-        lcd.print("Gro. Corn %:");
-        lcd.print(percentage);
-        lcd.print("%");
+    double percentageGroCorn = (averageDistanceGroSoy / totalDistance) * 100.0;
+    double percentageGroSoy = (averageDistanceGroCorn / totalDistance) * 100.0;
+    // Add them and re-scale to 100%
+    double sum = percentageGroCorn + percentageGroSoy;
+    percentageGroCorn = (percentageGroCorn / sum) * 100.0;
+    percentageGroSoy = (percentageGroSoy / sum) * 100.0;
 
-        lcd.setCursor(0, 1);
-        lcd.print("Gro. Soy %:");
-        lcd.print(100 - percentage);
-        lcd.print("%");
-    } else {
-        lcd.print("Error calculating");
-        lcd.setCursor(0, 1);
-        lcd.print("mixture ratio");
-    }
+    lcd.setCursor(0, 0);
+    lcd.print("Gro. Corn: ");
+    lcd.print(percentageGroCorn, 0);
+    lcd.print("%");
+
+    lcd.setCursor(0, 1);
+    lcd.print("Gro. Soy : ");
+    lcd.print(percentageGroSoy, 0);
+    lcd.print("%");
+
+    delay(10000); // Delay before next scan
+
 
     Serial.print("ADC0/F1 415nm : ");
     Serial.println(readings[0]);
