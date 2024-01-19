@@ -7,7 +7,7 @@
 #include <LiquidCrystal_I2C.h>
 
 #define MEASUREMENT_COUNT 10
-#define THRESHOLD 0.3
+#define THRESHOLD 0.15
 
 LiquidCrystal_I2C lcd(0x3F, 16, 2);  // Set the LCD address to 0x3F
 Adafruit_AS7341 sensor;
@@ -51,19 +51,19 @@ bool switchedToMixtureRatioMode = false;
 
 
 // Vector for white light and no grain sample
-uint16_t white[12] = {1962, 9994, 7576, 7116, 1, 1, 8665, 8019, 6401, 4631, 25091, 7311};
+uint16_t white[12] = {1344, 8936, 6312, 5692, 1, 1, 6931, 5938, 4346, 2633, 17128, 936};
 
 // Set vectors for each grain sample taken, which will the sample be compared to and classified as
 // Sample 1: Corn
-uint16_t corn[12] = {771, 3007, 2964, 3818, 0, 0, 6937, 7330, 5904, 3853, 13704, 2144};
+uint16_t corn[12] = {610, 2729, 2707, 3435, 0, 0, 5989, 6077, 4880, 2936, 11756, 890};
 // Sample 2: Soybean
-uint16_t soy[12] = {606, 2817, 2837, 3194, 0, 0, 4675, 4693, 3600, 2437, 10176, 1526};
+uint16_t soy[12] = {472, 2334, 2363, 2706, 0, 0, 4067, 3976, 3210, 2030, 8629, 672};
 // Sample 3: Wheat
-uint16_t wheat[12] = {733, 3514, 3236, 3509, 0, 0, 5153, 5163, 4176, 2860, 11916, 2058};
+uint16_t wheat[12] = {548, 2920, 2706, 2915, 0, 0, 4261, 4202, 3351, 2114, 9582, 702};
 // Sample 4: Ground Soybean
-uint16_t gro_soy[12] = {952, 4397, 4340, 4941, 0, 0, 7210, 7203, 5766, 3872, 14700, 2488};
+uint16_t gro_soy[12] = {726, 3751, 3629, 4177, 0, 0, 6125, 5979, 4721, 2870, 12697, 890};
 // Sample 5: Ground Corn
-uint16_t gro_corn[12] = {1097, 5515, 4634, 5772, 0, 0, 8601, 8004, 5999, 3697, 17279, 2070};
+uint16_t gro_corn[12] = {864, 4554, 3793, 4737, 0, 0, 7152, 6636, 4912, 2839, 13864, 918};
 
 void setup() {
     Wire.begin();
