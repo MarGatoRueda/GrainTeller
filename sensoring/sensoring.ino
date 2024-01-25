@@ -7,7 +7,7 @@
 #include <LiquidCrystal_I2C.h>
 
 #define MEASUREMENT_COUNT 10
-#define THRESHOLD 0.35
+#define THRESHOLD 0.1
 
 LiquidCrystal_I2C lcd(0x3F, 16, 2);  // Set the LCD address to 0x3F
 Adafruit_AS7341 sensor;
@@ -40,44 +40,46 @@ double euclideanDistance(uint16_t *reading1, uint16_t *reading2, uint8_t size) {
     return sqrt(sum);
 }
 
+
 bool isScanTriggered() {
     uint16_t readings[12];
     sensor.readAllChannels(readings);
 
-    return readings[10] > 5000;
+    return readings[10] < 11200;
 }
 bool isFirstTime = true;
 bool switchedToMixtureRatioMode = false;
 
-
-// Vector for white light and no grain sample
-uint16_t white[12] = {1344, 8936, 6312, 5692, 1, 1, 6931, 5938, 4346, 2633, 17128, 936};
+// Vector for white light when samples were taken.
+uint16_t whiteDatabase[12] = {897, 5964, 4261, 4014, 1, 1, 4959, 4241, 3073, 1815, 11935, 670};
+uint16_t whiteReading[12];
 
 // Set vectors for each grain sample taken, which will the sample be compared to and classified as
 // Sample 1: Corn
-uint16_t corn[12] = {610, 2729, 2707, 3435, 0, 0, 5989, 6077, 4880, 2936, 11756, 890};
+uint16_t corn[12] = {488, 2273, 2091, 2617, 0, 0, 4392, 4472, 3600, 2161, 8751, 674};
 // Sample 2: Soybean
-uint16_t soy[12] = {472, 2334, 2363, 2706, 0, 0, 4067, 3976, 3210, 2030, 8629, 672};
+uint16_t soy[12] = {333, 1597, 1640, 1897, 0, 0, 2806, 2774, 2239, 1412, 6339, 498};
 // Sample 3: Wheat
-uint16_t wheat[12] = {548, 2920, 2706, 2915, 0, 0, 4261, 4202, 3351, 2114, 9582, 702};
+uint16_t wheat[12] = {379, 1942, 1843, 2018, 0, 0, 3015, 3003, 2444, 1544, 6991, 550};
 // Sample 4: Ground Soybean
-uint16_t gro_soy[12] = {569, 4468, 3699, 4606, 0, 0, 6892, 6324, 4673, 2667, 12885, 862};
+uint16_t gro_soy[12] = {458, 2318, 2371, 2675, 0, 0, 3950, 3901, 3090, 1922, 8512, 612};
 // Sample 5: Ground Corn
-uint16_t gro_corn[12] = {838, 4468, 3699, 4606, 0, 0, 6892, 6324, 4673, 2667, 12885, 862};
+uint16_t gro_corn[12] = {649, 3428, 2975, 3608, 0, 0, 5411, 5039, 3736, 2199, 11145, 738};
 
 // Mixture Samples for Mixture Ratio Estimator Mode:
 // Sample 1: 20% Ground Corn, 80% Ground Soybean
-uint16_t gro_soy_20_gro_corn_80[12] = {580, 2909, 2815, 3312, 0, 0, 4999, 4895, 3867, 2341, 10113, 744};
+uint16_t gro_soy_80_gro_corn_20[12] = {470, 2395, 2402, 2725, 0, 0, 4044, 3991, 3134, 1936, 8704, 636};
 // Sample 2: 50% Ground Corn, 50% Ground Soybean
-uint16_t gro_soy_50_gro_corn_50[12] = {692, 3584, 3219, 3828, 0, 0, 5694, 5452, 4188, 2517, 11429, 804};
+uint16_t gro_soy_50_gro_corn_50[12] = {519, 2706, 2515, 2941, 0, 0, 4417, 4257, 3274, 1993, 9001, 642};
 // Sample 3: 70% Ground Corn, 30% Ground Soybean
-uint16_t gro_soy_70_gro_corn_30[12] = {714, 3608, 3273, 3929, 0, 0, 5990, 5762, 4373, 2670, 12009, 858};
+uint16_t gro_soy_30_gro_corn_70[12] = {556, 2839, 2663, 3143, 0, 0, 4740, 4553, 3481, 2115, 9888, 700};
 // Sample 4: 90% Ground Corn, 10% Ground Soybean
-uint16_t gro_soy_90_gro_corn_10[12] = {753, 3869, 3363, 4193, 0, 0, 6345, 6056, 4541, 2671, 12667, 888};
-// Sample 5: 100% Ground Corn
-uint16_t gro_corn_100[12] = {838, 4468, 3699, 4606, 0, 0, 6892, 6324, 4673, 2667, 12885, 862};
-// Sample 6: 100% Ground Soybean
-uint16_t gro_soy_100[12] = {569, 4468, 3699, 4606, 0, 0, 6892, 6324, 4673, 2667, 12885, 862};
+uint16_t gro_soy_10_gro_corn_90[12] = {612, 3220, 2887, 3460, 0, 0, 5256, 4944, 3706, 2218, 10658, 728};
+// Sample 5: 100% Ground Soybean
+uint16_t gro_soy_100[12] = {458, 2318, 2371, 2675, 0, 0, 3950, 3901, 3090, 1922, 8512, 612};
+// Sample 6: 100% Ground Corn
+uint16_t gro_corn_100[12] = {649, 3428, 2975, 3608, 0, 0, 5411, 5039, 3736, 2199, 11145, 738};
+
 
 
 void setup() {
@@ -112,7 +114,45 @@ void setup() {
 
     pinMode(A0, INPUT);
     pinMode(A1, INPUT);
+
+    // Obtain the white light vector
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Calibrating,");
+    lcd.setCursor(0, 1);
+    lcd.print("Please wait.");
+
+    uint16_t whiteReadings[12];
+    double sumWhiteReadings[12] = {0.0};
+
+    for (int i = 0; i < MEASUREMENT_COUNT; ++i) {
+        if (!sensor.readAllChannels(whiteReadings)) {
+            lcd.clear();
+            lcd.print("Error reading");
+            lcd.print("all channels!");
+            return;
+        }
+
+        for (int j = 0; j < 12; ++j) {
+            sumWhiteReadings[j] += whiteReadings[j];
+        }
+
+        delay(50); // Delay between measurements
+    }
+
+    for (int i = 0; i < 12; ++i) {
+        whiteReading[i] = sumWhiteReadings[i] / MEASUREMENT_COUNT;
+    }
+
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Calibration");
+    lcd.setCursor(0, 1);
+    lcd.print("complete!");
+    delay(2000);
 }
+
+
 
 enum Mode {
     GRAIN_SCANNING,
@@ -136,9 +176,9 @@ void mixtureRatioEstimatorMode() {
 
     while (!isScanTriggered()) {
         lcd.setCursor(0, 0);
-        lcd.print("  == Insert ==  ");
+        lcd.print("Please insert   ");
         lcd.setCursor(0, 1);
-        lcd.print("  == Sample ==  ");
+        lcd.print("Mixture sample  ");
         delay(500);
     }
     lcd.clear();
@@ -158,27 +198,15 @@ void mixtureRatioEstimatorMode() {
 
     uint16_t readings[12];
 
-    double sumDistancesGroSoy20GroCorn80 = 0.0;
-    double sumDistancesGroSoy50GroCorn50 = 0.0;
-    double sumDistancesGroSoy70GroCorn30 = 0.0;
-    double sumDistancesGroSoy90GroCorn10 = 0.0;
-    double sumDistancesGroCorn100 = 0.0;
-    double sumDistancesGroSoy100 = 0.0;
+    double sumDistancesGroSoy = 0.0;
+    double sumDistancesGroCorn = 0.0;
+    double normalizedGroSoy[12];
+    double normalizedGroCorn[12];
 
-    double normalizedGroSoy20GroCorn80[12];
-    double normalizedGroSoy50GroCorn50[12];
-    double normalizedGroSoy70GroCorn30[12];
-    double normalizedGroSoy90GroCorn10[12];
-    double normalizedGroCorn100[12];
-    double normalizedGroSoy100[12];
-
+    // Obtain the normalized vectors for the pure samples
     for (int i = 0; i < 12; ++i) {
-        normalizedGroSoy20GroCorn80[i] = static_cast<double>(gro_soy_20_gro_corn_80[i]) / white[i];
-        normalizedGroSoy50GroCorn50[i] = static_cast<double>(gro_soy_50_gro_corn_50[i]) / white[i];
-        normalizedGroSoy70GroCorn30[i] = static_cast<double>(gro_soy_70_gro_corn_30[i]) / white[i];
-        normalizedGroSoy90GroCorn10[i] = static_cast<double>(gro_soy_90_gro_corn_10[i]) / white[i];
-        normalizedGroCorn100[i] = static_cast<double>(gro_corn_100[i]) / white[i];
-        normalizedGroSoy100[i] = static_cast<double>(gro_soy_100[i]) / white[i];
+        normalizedGroSoy[i] = static_cast<double>(gro_soy_100[i]) / whiteDatabase[i];
+        normalizedGroCorn[i] = static_cast<double>(gro_corn_100[i]) / whiteDatabase[i];
     }
 
     for (int i = 0; i < MEASUREMENT_COUNT; ++i) {
@@ -190,95 +218,37 @@ void mixtureRatioEstimatorMode() {
         }
 
         double normalizedReadings[12];
+
+
         for (int j = 0; j < 12; ++j) {
-            normalizedReadings[j] = static_cast<double>(readings[j]) / white[j];
+            normalizedReadings[j] = static_cast<double>(readings[j]) / whiteReading[j];
         }
+        double distanceGroSoy = euclideanDistance(normalizedReadings, normalizedGroSoy, 12);
+        double distanceGroCorn = euclideanDistance(normalizedReadings, normalizedGroCorn, 12);
 
-        double distanceGroSoy20GroCorn80 = euclideanDistance(normalizedReadings, normalizedGroSoy20GroCorn80, 12);
-        double distanceGroSoy50GroCorn50 = euclideanDistance(normalizedReadings, normalizedGroSoy50GroCorn50, 12);
-        double distanceGroSoy70GroCorn30 = euclideanDistance(normalizedReadings, normalizedGroSoy70GroCorn30, 12);
-        double distanceGroSoy90GroCorn10 = euclideanDistance(normalizedReadings, normalizedGroSoy90GroCorn10, 12);
-        double distanceGroCorn100 = euclideanDistance(normalizedReadings, normalizedGroCorn100, 12);
-        double distanceGroSoy100 = euclideanDistance(normalizedReadings, normalizedGroSoy100, 12);
+        sumDistancesGroSoy += distanceGroSoy;
+        sumDistancesGroCorn += distanceGroCorn;
 
-        sumDistancesGroSoy20GroCorn80 += distanceGroSoy20GroCorn80;
-        sumDistancesGroSoy50GroCorn50 += distanceGroSoy50GroCorn50;
-        sumDistancesGroSoy70GroCorn30 += distanceGroSoy70GroCorn30;
-        sumDistancesGroSoy90GroCorn10 += distanceGroSoy90GroCorn10;
-        sumDistancesGroCorn100 += distanceGroCorn100;
-        sumDistancesGroSoy100 += distanceGroSoy100;
-
-        delay(20); // Delay between measurements
+        delay(50); // Delay between measurements
     }
 
-    double averageDistanceGroSoy20GroCorn80 = sumDistancesGroSoy20GroCorn80 / MEASUREMENT_COUNT;
-    double averageDistanceGroSoy50GroCorn50 = sumDistancesGroSoy50GroCorn50 / MEASUREMENT_COUNT;
-    double averageDistanceGroSoy70GroCorn30 = sumDistancesGroSoy70GroCorn30 / MEASUREMENT_COUNT;
-    double averageDistanceGroSoy90GroCorn10 = sumDistancesGroSoy90GroCorn10 / MEASUREMENT_COUNT;
-    double averageDistanceGroCorn100 = sumDistancesGroCorn100 / MEASUREMENT_COUNT;
-    double averageDistanceGroSoy100 = sumDistancesGroSoy100 / MEASUREMENT_COUNT;
+    double averageDistanceGroSoy = sumDistancesGroSoy / MEASUREMENT_COUNT;
+    double averageDistanceGroCorn = sumDistancesGroCorn / MEASUREMENT_COUNT;
+
+    // Compute the distance between the two pure samples at the 6th and 7th elements
+    double totalDistance = euclideanDistance(normalizedGroSoy, normalizedGroCorn, 12);
+
+    // Grade the distance of the scanned sample from 0 to 100
+    double grade = 100 - ((averageDistanceGroSoy / totalDistance) * 100);
 
     lcd.clear();
-
-    double distances[6] = {
-        averageDistanceGroSoy20GroCorn80,
-        averageDistanceGroSoy50GroCorn50,
-        averageDistanceGroSoy70GroCorn30,
-        averageDistanceGroSoy90GroCorn10,
-        averageDistanceGroCorn100,
-        averageDistanceGroSoy100
-    };
-
-    double minDist = distances[0];
-    int index = 0;
-
-    for (int i = 1; i < 6; ++i) {
-        if (distances[i] < minDist) {
-            minDist = distances[i];
-            index = i;
-        }
-    }
-
-    if (minDist < THRESHOLD) {
-        lcd.setCursor(0, 0);
-        lcd.print("     Sample: ");
-        lcd.setCursor(0, 1);
-        switch (index) {
-            case 0:
-                lcd.print("20% Ground Corn");
-                break;
-            case 1:
-                lcd.print("50% Ground Corn");
-                break;
-            case 2:
-                lcd.print("70% Ground Corn");
-                break;
-            case 3:
-                lcd.print("90% Ground Corn");
-                break;
-            case 4:
-                lcd.print("100% Ground Corn");
-                break;
-            case 5:
-                lcd.print("100% Ground Soy");
-                break;
-        }
-    } else {
-        lcd.print("Sample: Unknown");
-        lcd.setCursor(0, 1);
-        lcd.print("     Retry");
-    }
+    lcd.setCursor(0, 0);
+    lcd.print("Gro. Soy %");
+    lcd.print(grade, 0);
+    lcd.setCursor(0, 1);
+    lcd.print("Gro. Corn %");
+    lcd.print(100 - grade, 0);
     
-
-    // Scan again after the sensor detects a drop in the clear channel
-    while (true) {
-        if (!isScanTriggered()) {
-            break;
-        }
-    }
-
-
-
     Serial.print("ADC0/F1 415nm : ");
     Serial.println(readings[0]);
     Serial.print("ADC1/F2 445nm : ");
@@ -299,6 +269,15 @@ void mixtureRatioEstimatorMode() {
     Serial.println(readings[10]);
     Serial.print("ADC5/NIR      : ");
     Serial.println(readings[11]);
+
+    Serial.println();
+
+    // Scan again after the sensor detects a spike in the clear channel
+    while (true) {
+        if (!isScanTriggered()) {
+            break;
+        }
+    }
 }
 
 void grainScanningMode() {
@@ -316,9 +295,9 @@ void grainScanningMode() {
 
     while (!isScanTriggered()) {
         lcd.setCursor(0, 0);
-        lcd.print("  == Insert ==  ");
+        lcd.print("Please insert   ");
         lcd.setCursor(0, 1);
-        lcd.print("  == Sample ==  ");
+        lcd.print("Grain sample    ");
         delay(500);
     }
     lcd.clear();
@@ -351,11 +330,11 @@ void grainScanningMode() {
     double normalizedWheat[12];
 
     for (int i = 0; i < 12; ++i) {
-        normalizedGroSoy[i] = static_cast<double>(gro_soy[i]) / white[i];
-        normalizedGroCorn[i] = static_cast<double>(gro_corn[i]) / white[i];
-        normalizedCorn[i] = static_cast<double>(corn[i]) / white[i];
-        normalizedSoy[i] = static_cast<double>(soy[i]) / white[i];
-        normalizedWheat[i] = static_cast<double>(wheat[i]) / white[i];
+        normalizedGroSoy[i] = static_cast<double>(gro_soy[i]) / whiteDatabase[i];
+        normalizedGroCorn[i] = static_cast<double>(gro_corn[i]) / whiteDatabase[i];
+        normalizedCorn[i] = static_cast<double>(corn[i]) / whiteDatabase[i];
+        normalizedSoy[i] = static_cast<double>(soy[i]) / whiteDatabase[i];
+        normalizedWheat[i] = static_cast<double>(wheat[i]) / whiteDatabase[i];
     }
 
     for (int i = 0; i < MEASUREMENT_COUNT; ++i) {
@@ -368,7 +347,7 @@ void grainScanningMode() {
 
         double normalizedReadings[12];
         for (int j = 0; j < 12; ++j) {
-            normalizedReadings[j] = static_cast<double>(readings[j]) / white[j];
+            normalizedReadings[j] = static_cast<double>(readings[j]) / whiteReading[j];
         }
 
         double distanceCorn = euclideanDistance(normalizedReadings, normalizedCorn, 12);
@@ -434,19 +413,13 @@ void grainScanningMode() {
                 break;
         }
     } else {
-        lcd.print("Sample: Unknown");
+        lcd.print("Sample Unknown");
         lcd.setCursor(0, 1);
-        lcd.print("     Retry");
+        lcd.print("Please retry");
     }
 
-     // Scan again after the sensor detects a drop in the clear channel
-    while (true) {
-        if (!isScanTriggered()) {
-            break;
-        }
-    }
-
-
+    Serial.print("Min distance: ");
+    Serial.println(minDist, 3);
     Serial.print("ADC0/F1 415nm : ");
     Serial.println(readings[0]);
     Serial.print("ADC1/F2 445nm : ");
@@ -469,9 +442,17 @@ void grainScanningMode() {
     Serial.println(readings[11]);
 
     Serial.println();
+
+     // Scan again after the sensor detects a spike in the clear channel
+    while (true) {
+        if (!isScanTriggered()) {
+            break;
+        }
+    }
 }
 
 void loop() {
+
     // Check the state of the switch connected to A0 or A1
     if (analogRead(A0) > analogRead(A1)) {
         if (currentMode != MIXTURE_RATIO_ESTIMATOR) {
