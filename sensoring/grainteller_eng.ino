@@ -1,5 +1,5 @@
 // GrainTeller 1.0
-// Made by Marcelo Gatica Ruedlinger
+// Made by Marcelo Gatica Ruedlinger at MWL
 // Electrical Engineering Student at Universidad de Chile
 
 #include <Wire.h>
@@ -7,7 +7,7 @@
 #include <LiquidCrystal_I2C.h>
 
 #define MEASUREMENT_COUNT 10
-#define THRESHOLD 0.1
+#define THRESHOLD 0.22
 
 LiquidCrystal_I2C lcd(0x3F, 16, 2);  // Set the LCD address to 0x3F
 Adafruit_AS7341 sensor;
@@ -40,7 +40,6 @@ double euclideanDistance(uint16_t *reading1, uint16_t *reading2, uint8_t size) {
     return sqrt(sum);
 }
 
-
 bool isScanTriggered() {
     uint16_t readings[12];
     sensor.readAllChannels(readings);
@@ -52,6 +51,8 @@ bool switchedToMixtureRatioMode = false;
 
 // Vector for white light when samples were taken.
 uint16_t whiteDatabase[12] = {897, 5964, 4261, 4014, 1, 1, 4959, 4241, 3073, 1815, 11935, 670};
+
+// Vector for white light when the sensor is calibrated
 uint16_t whiteReading[12];
 
 // Set vectors for each grain sample taken, which will the sample be compared to and classified as
@@ -152,8 +153,6 @@ void setup() {
     delay(2000);
 }
 
-
-
 enum Mode {
     GRAIN_SCANNING,
     MIXTURE_RATIO_ESTIMATOR
@@ -181,7 +180,9 @@ void mixtureRatioEstimatorMode() {
         lcd.print("Mixture sample  ");
         delay(500);
     }
+
     lcd.clear();
+
     // Sample detected countdown
     for (int i = 3; i > 0; --i) {
         lcd.setCursor(0, 0);
@@ -203,10 +204,10 @@ void mixtureRatioEstimatorMode() {
     double normalizedGroSoy[12];
     double normalizedGroCorn[12];
 
-    // Obtain the normalized vectors for the pure samples
+    // Obtener los vectores normalizados de las muestras de soja y maíz molidos
     for (int i = 0; i < 12; ++i) {
-        normalizedGroSoy[i] = static_cast<double>(gro_soy_100[i]) / whiteDatabase[i];
-        normalizedGroCorn[i] = static_cast<double>(gro_corn_100[i]) / whiteDatabase[i];
+        normalizedGroSoy[i] = static_cast<double>(gro_soy[i]) / whiteDatabase[i];
+        normalizedGroCorn[i] = static_cast<double>(gro_corn[i]) / whiteDatabase[i];
     }
 
     for (int i = 0; i < MEASUREMENT_COUNT; ++i) {
@@ -223,23 +224,30 @@ void mixtureRatioEstimatorMode() {
         for (int j = 0; j < 12; ++j) {
             normalizedReadings[j] = static_cast<double>(readings[j]) / whiteReading[j];
         }
-        double distanceGroSoy = euclideanDistance(normalizedReadings, normalizedGroSoy, 12);
-        double distanceGroCorn = euclideanDistance(normalizedReadings, normalizedGroCorn, 12);
+        double distanceGroSoy = euclideanDistance(normalizedReadings, normalizedGroSoy, 11);
+        double distanceGroCorn = euclideanDistance(normalizedReadings, normalizedGroCorn, 11);
 
         sumDistancesGroSoy += distanceGroSoy;
         sumDistancesGroCorn += distanceGroCorn;
 
-        delay(50); // Delay between measurements
+        delay(50);
     }
 
+    // Obtain the average distance for each sample
     double averageDistanceGroSoy = sumDistancesGroSoy / MEASUREMENT_COUNT;
     double averageDistanceGroCorn = sumDistancesGroCorn / MEASUREMENT_COUNT;
 
-    // Compute the distance between the two pure samples at the 6th and 7th elements
-    double totalDistance = euclideanDistance(normalizedGroSoy, normalizedGroCorn, 12);
+ 
+    double totalDistance = euclideanDistance(normalizedGroSoy, normalizedGroCorn, 11);
 
-    // Grade the distance of the scanned sample from 0 to 100
+    // Calculate the percentage of each sample
     double grade = 100 - ((averageDistanceGroSoy / totalDistance) * 100);
+
+    if (grade < 0) {
+        grade = 0;
+    } else if (grade > 100) {
+        grade = 100;
+    }
 
     lcd.clear();
     lcd.setCursor(0, 0);
@@ -272,7 +280,6 @@ void mixtureRatioEstimatorMode() {
 
     Serial.println();
 
-    // Scan again after the sensor detects a spike in the clear channel
     while (true) {
         if (!isScanTriggered()) {
             break;
@@ -365,6 +372,7 @@ void grainScanningMode() {
         delay(20); // Delay between measurements
     }
 
+    // Obtain the average distance for each sample
     double averageDistanceCorn = sumDistancesCorn / MEASUREMENT_COUNT;
     double averageDistanceSoy = sumDistancesSoy / MEASUREMENT_COUNT;
     double averageDistanceWheat = sumDistancesWheat / MEASUREMENT_COUNT;
@@ -391,6 +399,7 @@ void grainScanningMode() {
         }
     }
 
+    // Print the sample name, if the distance is less than the threshold.
     if (minDist < THRESHOLD) {
         lcd.setCursor(0, 0);
         lcd.print("     Sample: ");
